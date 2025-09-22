@@ -17,8 +17,8 @@ def login_page():
 
 # Function to display content after a successful login
 def main_app():
-    st.title("🩺 Dashboard")
-    st.write("Welcome to your private dashboard. You can now access all the features.")
+    st.title("You are logged in")
+    st.write("Please select a page from the sidebar")
     
     # Add a logout button in the sidebar
     # This button, when clicked, will set the session state to False and rerun the app

@@ -9,8 +9,215 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import joblib
 
-# --- Page Configuration ---
-st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
+# --- Helper functions and AI model loading ---
+PATIENTS_DB = "patients.csv"
+REPORTS_DB = "reports.csv"
+MODEL_PATH = "risk_model.joblib"
+SCALER_PATH = "scaler.joblib"
+REPORTS_FOLDER = "reports" # New folder for HTML reports
+
+def create_reports_folder():
+    """Ensures the reports directory exists."""
+    if not os.path.exists(REPORTS_FOLDER):
+        os.makedirs(REPORTS_FOLDER)
+
+# Add your existing helper functions below
+def load_patients_df():
+    # ... your load_patients_df function ...
+    if os.path.exists(PATIENTS_DB):
+        return pd.read_csv(PATIENTS_DB)
+    else:
+        return pd.DataFrame(columns=[
+            "patient_id", "name", "phone", "address", "age", "gender",
+            "systolic_bp_untreated", "diastolic_bp_untreated",
+            "systolic_bp_medicated", "diastolic_bp_medicated",
+            "total_cholesterol", "hdl_cholesterol", "triglycerides",
+            "smoker", "diabetic", "diabetes_medication", "family_history_cvd"
+        ])
+
+def save_patients_df(df):
+    df.to_csv(PATIENTS_DB, index=False)
+
+def load_reports_df():
+    if os.path.exists(REPORTS_DB):
+        return pd.read_csv(REPORTS_DB)
+    else:
+        return pd.DataFrame(columns=[
+            "report_id", "patient_id", "analysis_date", "risk_score", "status",
+            "heart_rate", "p_wave_duration", "qrs_duration", "qt_interval", "pcg_result", "report_path"
+        ]) # Added report_path
+
+def save_reports_df(df):
+    df.to_csv(REPORTS_DB, index=False)
+
+def train_and_save_model():
+    data = []
+    for _ in range(5000):
+        age = np.random.randint(30, 90)
+        gender = np.random.choice([0, 1])
+        smoker = np.random.choice([True, False])
+        diabetic = np.random.choice([True, False])
+        diabetes_medication = np.random.choice([True, False]) if diabetic else False
+        family_hist = np.random.choice([True, False])
+        sbp = np.random.randint(100, 200)
+        dbp = np.random.randint(60, 120)
+        chol = np.random.randint(150, 300)
+        hdl = np.random.randint(20, 80)
+        triglycerides = np.random.randint(50, 400)
+        bpm = np.random.randint(50, 120)
+        sdnn = np.random.randint(20, 150)
+        qrs = np.random.uniform(0.08, 0.12)
+        qt = np.random.uniform(0.35, 0.45)
+        p_wave = np.random.uniform(0.06, 0.11)
+        risk_score = 0.0
+        if age > 60: risk_score += 0.20
+        if sbp > 140: risk_score += 0.15
+        if chol > 220: risk_score += 0.15
+        if hdl < 40: risk_score += 0.10
+        if triglycerides > 200: risk_score += 0.10
+        if smoker: risk_score += 0.15
+        if diabetic: risk_score += 0.15
+        if family_hist: risk_score += 0.10
+        if qrs > 0.11: risk_score += 0.10
+        if qt > 0.44: risk_score += 0.15
+        status = "High Risk" if risk_score > 0.6 else "Moderate Risk" if risk_score > 0.3 else "Low Risk"
+        data.append([age, gender, sbp, dbp, chol, hdl, triglycerides, smoker, diabetic, diabetes_medication, family_hist, bpm, sdnn, qrs, qt, p_wave, status])
+    df_train = pd.DataFrame(data, columns=['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave', 'status'])
+    features = ['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave']
+    X = df_train[features]
+    y = df_train['status']
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    model = RandomForestClassifier(n_estimators=150, max_depth=10, random_state=42)
+    model.fit(X_scaled, y)
+    joblib.dump(model, MODEL_PATH)
+    joblib.dump(scaler, SCALER_PATH)
+    st.success("AI model trained and saved!")
+    return model, scaler
+
+def load_or_train_model():
+    if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+        model = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        return model, scaler
+    else:
+        return train_and_save_model()
+
+ai_model, scaler = load_or_train_model()
+
+def analyze_ppg_signal(ppg_data, sample_rate):
+    try:
+        working_data, measures = hp.process(hp.scale_data(ppg_data), sample_rate)
+        return working_data, measures
+    except Exception as e:
+        st.error(f"HeartPy Error: Could not process PPG signal. Details: {e}")
+        return None, None
+
+def analyze_ecg_signal(ecg_data, sample_rate):
+    p_wave_duration = np.random.uniform(0.06, 0.11)
+    qrs_duration = np.random.uniform(0.08, 0.12)
+    qt_interval = np.random.uniform(0.35, 0.45)
+    return p_wave_duration, qrs_duration, qt_interval
+
+def analyze_pcg_signal(pcg_data):
+    if np.std(pcg_data) > 0.1:
+        return "Abnormal (Murmur Detected)"
+    else:
+        return "Normal"
+
+def get_vascular_risk_score_ai(patient_data, signal_measures, model, scaler):
+    input_features_dict = {
+        'age': int(patient_data.get('age', 40)),
+        'gender': 0 if patient_data.get('gender', 'Female') == 'Female' else 1,
+        'sbp': int(patient_data.get('systolic_bp_untreated', patient_data.get('systolic_bp_medicated', 120))),
+        'dbp': int(patient_data.get('diastolic_bp_untreated', patient_data.get('diastolic_bp_medicated', 80))),
+        'chol': int(patient_data.get('total_cholesterol', 180)),
+        'hdl': int(patient_data.get('hdl_cholesterol', 45)),
+        'triglycerides': int(patient_data.get('triglycerides', 100)),
+        'smoker': patient_data.get('smoker', False),
+        'diabetic': patient_data.get('diabetic', False),
+        'diabetes_medication': patient_data.get('diabetes_medication', False),
+        'family_hist': patient_data.get('family_history_cvd', False),
+        'bpm': signal_measures.get('bpm', 70),
+        'sdnn': signal_measures.get('sdnn', 100),
+        'qrs': signal_measures.get('qrs_duration', 0.1),
+        'qt': signal_measures.get('qt_interval', 0.4),
+        'p_wave': signal_measures.get('p_wave_duration', 0.08),
+    }
+    input_df = pd.DataFrame([input_features_dict])
+    features = ['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave']
+    input_scaled = scaler.transform(input_df[features])
+    predicted_status = model.predict(input_scaled)[0]
+    probas = model.predict_proba(input_scaled)
+    class_labels = model.classes_
+    risk_score = 0.0
+    if 'High Risk' in class_labels:
+        risk_score = probas[0, np.where(class_labels == 'High Risk')[0][0]]
+    return min(max(risk_score, 0), 1), predicted_status
+
+def save_report_html(report_id, df_plot, analysis):
+    """Saves the full analysis report as a self-contained HTML file."""
+    create_reports_folder()
+    report_path = os.path.join(REPORTS_FOLDER, f"report_{report_id}.html")
+    
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Patient Report {report_id}</title></head>
+    <body>
+    <h1>Patient Report</h1>
+    <h3>AI-Powered Risk Assessment</h3>
+    <p><strong>Status:</strong> {status}</p>
+    <p><strong>Estimated Blockage Risk:</strong> {risk_score:.0%}</p>
+    <p><strong>Heart Rate (BPM):</strong> {heart_rate:.1f}</p>
+    <p><strong>QRS Duration (s):</strong> {qrs_duration:.3f}</p>
+    <p><strong>QT Interval (s):</strong> {qt_interval:.3f}</p>
+    <p><strong>PCG Analysis:</strong> {pcg_result}</p>
+    <h2>Multi-Sensor Waveforms</h2>
+    """.format(
+        report_id=report_id,
+        status=analysis.get('status'),
+        risk_score=analysis.get('risk_score'),
+        heart_rate=analysis.get('heart_rate'),
+        qrs_duration=analysis.get('qrs_duration'),
+        qt_interval=analysis.get('qt_interval'),
+        pcg_result=analysis.get('pcg_result')
+    )
+
+    fig_ecg = px.line(df_plot, x='timestamp', y='ecg_signal', title='ECG Waveform')
+    html_content += fig_ecg.to_html(full_html=False, include_plotlyjs='cdn')
+    
+    fig_ppg = px.line(df_plot, x='timestamp', y='ppg_signal', title='PPG Waveform')
+    html_content += fig_ppg.to_html(full_html=False, include_plotlyjs='cdn')
+    
+    fig_pcg = px.line(df_plot, x='timestamp', y='pcg_signal', title='PCG Waveform (Heart Sounds)')
+    html_content += fig_pcg.to_html(full_html=False, include_plotlyjs='cdn')
+    
+    html_content += "</body></html>"
+    
+    with open(report_path, "w") as f:
+        f.write(html_content)
+        
+    return report_path
+
+
+# --- Login and Main App Logic ---
+if 'password_correct' not in st.session_state or not st.session_state['password_correct']:
+    st.set_page_config(page_title="Login", page_icon="🔐")
+    st.title("🔐 Login")
+    password = st.text_input("Enter password", type="password")
+
+    if st.button("Login"):
+        if password == "12345":
+            st.session_state['password_correct'] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    st.stop()
+
+# --- Main Dashboard Logic (This part only runs if the password is correct) ---
+st.set_page_config(page_title="", page_icon="📊", layout="wide")
+st.title("🩺 Dashboard")
 
 # --- CUSTOM CSS STYLING ---
 st.markdown("""
@@ -70,10 +277,9 @@ h1, h2, h3, h4, h5, h6 {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Security Check ---
-if not st.session_state.get("password_correct", False):
-    st.info("You must be logged in to view this page.")
-    st.stop()
+# Add a logout button to the sidebar
+with st.sidebar:
+    st.button("Logout", on_click=lambda: st.session_state.update(password_correct=False))
 
 # --- Initialize session state ---
 if 'patient_loaded' not in st.session_state:
@@ -82,151 +288,19 @@ if 'theme' not in st.session_state:
     st.session_state['theme'] = "Dark"
 if 'last_analysis' not in st.session_state:
     st.session_state['last_analysis'] = None
-
-# --- Helper functions for saving/loading data to CSV files ---
-PATIENTS_DB = "patients.csv"
-REPORTS_DB = "reports.csv"
-MODEL_PATH = "risk_model.joblib"
-SCALER_PATH = "scaler.joblib"
-
-def load_patients_df():
-    """Loads patient data from CSV or creates a new DataFrame with all parameters."""
-    if os.path.exists(PATIENTS_DB):
-        return pd.read_csv(PATIENTS_DB)
+    
+# Check if a report is being viewed
+if st.session_state.get('view_report_path'):
+    st.header("Saved Report")
+    report_path = st.session_state.get('view_report_path')
+    if os.path.exists(report_path):
+        with open(report_path, "r") as f:
+            html_content = f.read()
+            st.components.v1.html(html_content, height=800, scrolling=True)
+        st.button("⬅️ Back to Dashboard", on_click=lambda: st.session_state.pop('view_report_path'))
     else:
-        return pd.DataFrame(columns=[
-            "patient_id", "name", "phone", "address", "age", "gender",
-            "systolic_bp_untreated", "diastolic_bp_untreated",
-            "systolic_bp_medicated", "diastolic_bp_medicated",
-            "total_cholesterol", "hdl_cholesterol", "triglycerides",
-            "smoker", "diabetic", "diabetes_medication", "family_history_cvd"
-        ])
-
-def save_patients_df(df):
-    """Saves patient data to CSV."""
-    df.to_csv(PATIENTS_DB, index=False)
-
-def load_reports_df():
-    """Loads report data from CSV or creates a new DataFrame."""
-    if os.path.exists(REPORTS_DB):
-        return pd.read_csv(REPORTS_DB)
-    else:
-        return pd.DataFrame(columns=[
-            "report_id", "patient_id", "analysis_date", "risk_score", "status",
-            "heart_rate", "p_wave_duration", "qrs_duration", "qt_interval", "pcg_result"
-        ])
-
-def save_reports_df(df):
-    """Saves report data to CSV."""
-    df.to_csv(REPORTS_DB, index=False)
-
-# --- AI Model Training and Loading ---
-def train_and_save_model():
-    """Trains a new AI model based on a more complex set of rules and saves it."""
-    data = []
-    for _ in range(5000):
-        age = np.random.randint(30, 90)
-        gender = np.random.choice([0, 1])
-        smoker = np.random.choice([True, False])
-        diabetic = np.random.choice([True, False])
-        diabetes_medication = np.random.choice([True, False]) if diabetic else False
-        family_hist = np.random.choice([True, False])
-        sbp = np.random.randint(100, 200)
-        dbp = np.random.randint(60, 120)
-        chol = np.random.randint(150, 300)
-        hdl = np.random.randint(20, 80)
-        triglycerides = np.random.randint(50, 400)
-        bpm = np.random.randint(50, 120)
-        sdnn = np.random.randint(20, 150)
-        qrs = np.random.uniform(0.08, 0.12)
-        qt = np.random.uniform(0.35, 0.45)
-        p_wave = np.random.uniform(0.06, 0.11)
-        risk_score = 0.0
-        if age > 60: risk_score += 0.20
-        if sbp > 140: risk_score += 0.15
-        if chol > 220: risk_score += 0.15
-        if hdl < 40: risk_score += 0.10
-        if triglycerides > 200: risk_score += 0.10
-        if smoker: risk_score += 0.15
-        if diabetic: risk_score += 0.15
-        if family_hist: risk_score += 0.10
-        if qrs > 0.11: risk_score += 0.10
-        if qt > 0.44: risk_score += 0.15
-        status = "High Risk" if risk_score > 0.6 else "Moderate Risk" if risk_score > 0.3 else "Low Risk"
-        data.append([age, gender, sbp, dbp, chol, hdl, triglycerides, smoker, diabetic, diabetes_medication, family_hist, bpm, sdnn, qrs, qt, p_wave, status])
-    df_train = pd.DataFrame(data, columns=['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave', 'status'])
-    features = ['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave']
-    X = df_train[features]
-    y = df_train['status']
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    model = RandomForestClassifier(n_estimators=150, max_depth=10, random_state=42)
-    model.fit(X_scaled, y)
-    joblib.dump(model, MODEL_PATH)
-    joblib.dump(scaler, SCALER_PATH)
-    st.success("AI model trained and saved!")
-    return model, scaler
-
-def load_or_train_model():
-    if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
-        model = joblib.load(MODEL_PATH)
-        scaler = joblib.load(SCALER_PATH)
-        return model, scaler
-    else:
-        return train_and_save_model()
-
-ai_model, scaler = load_or_train_model()
-
-# --- Analysis Functions ---
-def analyze_ppg_signal(ppg_data, sample_rate):
-    try:
-        working_data, measures = hp.process(hp.scale_data(ppg_data), sample_rate)
-        return working_data, measures
-    except Exception as e:
-        st.error(f"HeartPy Error: Could not process PPG signal. Details: {e}")
-        return None, None
-
-def analyze_ecg_signal(ecg_data, sample_rate):
-    p_wave_duration = np.random.uniform(0.06, 0.11)
-    qrs_duration = np.random.uniform(0.08, 0.12)
-    qt_interval = np.random.uniform(0.35, 0.45)
-    return p_wave_duration, qrs_duration, qt_interval
-
-def analyze_pcg_signal(pcg_data):
-    if np.std(pcg_data) > 0.1:
-        return "Abnormal (Murmur Detected)"
-    else:
-        return "Normal"
-
-def get_vascular_risk_score_ai(patient_data, signal_measures, model, scaler):
-    input_features_dict = {
-        'age': int(patient_data.get('age', 40)),
-        'gender': 0 if patient_data.get('gender', 'Female') == 'Female' else 1,
-        'sbp': int(patient_data.get('systolic_bp_untreated', patient_data.get('systolic_bp_medicated', 120))),
-        'dbp': int(patient_data.get('diastolic_bp_untreated', patient_data.get('diastolic_bp_medicated', 80))),
-        'chol': int(patient_data.get('total_cholesterol', 180)),
-        'hdl': int(patient_data.get('hdl_cholesterol', 45)),
-        'triglycerides': int(patient_data.get('triglycerides', 100)),
-        'smoker': patient_data.get('smoker', False),
-        'diabetic': patient_data.get('diabetic', False),
-        'diabetes_medication': patient_data.get('diabetes_medication', False),
-        'family_hist': patient_data.get('family_history_cvd', False),
-        'bpm': signal_measures.get('bpm', 70),
-        'sdnn': signal_measures.get('sdnn', 100),
-        'qrs': signal_measures.get('qrs_duration', 0.1),
-        'qt': signal_measures.get('qt_interval', 0.4),
-        'p_wave': signal_measures.get('p_wave_duration', 0.08),
-    }
-    input_df = pd.DataFrame([input_features_dict])
-    features = ['age', 'gender', 'sbp', 'dbp', 'chol', 'hdl', 'triglycerides', 'smoker', 'diabetic', 'diabetes_medication', 'family_hist', 'bpm', 'sdnn', 'qrs', 'qt', 'p_wave']
-    input_scaled = scaler.transform(input_df[features])
-    predicted_status = model.predict(input_scaled)[0]
-    probas = model.predict_proba(input_scaled)
-    class_labels = model.classes_
-    risk_score = 0.0
-    if 'High Risk' in class_labels:
-        risk_score = probas[0, np.where(class_labels == 'High Risk')[0][0]]
-    return min(max(risk_score, 0), 1), predicted_status
+        st.error("Report not found.")
+    st.stop()
 
 # --- Main App Logic ---
 if not st.session_state.get('patient_loaded', False):
