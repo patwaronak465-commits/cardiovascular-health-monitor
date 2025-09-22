@@ -217,7 +217,7 @@ if 'password_correct' not in st.session_state or not st.session_state['password_
 
 # --- Main Dashboard Logic (This part only runs if the password is correct) ---
 st.set_page_config(page_title="", page_icon="📊", layout="wide")
-st.title("🩺 Dashboard")
+st.title("")
 
 # --- CUSTOM CSS STYLING ---
 st.markdown("""
