@@ -1,23 +1,32 @@
 import streamlit as st
 
+# Function to handle the login page UI
 def login_page():
     st.set_page_config(page_title="Login", page_icon="🔐")
     st.title("🔐 Login")
 
     password = st.text_input("Enter password", type="password")
-    
-    # Placeholder password for demonstration
+
     if st.button("Login"):
-        if password == "12345":  # Replace with a secure password
+        # Placeholder password for demonstration
+        if password == "12345":  # You should use a more secure method in a real app
             st.session_state['password_correct'] = True
-            st.success("Login successful!")
             st.rerun()
         else:
             st.error("Incorrect password.")
 
-# Main app logic
+# Function to display content after a successful login
+def main_app():
+    st.title("🩺 Dashboard")
+    st.write("Welcome to your private dashboard. You can now access all the features.")
+    
+    # Add a logout button in the sidebar
+    # This button, when clicked, will set the session state to False and rerun the app
+    with st.sidebar:
+        st.button("Logout", on_click=lambda: st.session_state.update(password_correct=False))
+
+# Main logic to check for login status
 if 'password_correct' not in st.session_state or not st.session_state['password_correct']:
     login_page()
 else:
-    st.title("You are logged in.")
-    st.write("Please select a page from the sidebar.")
+    main_app()
