@@ -1,0 +1,6 @@
+patient_id,name,phone,address,age,gender,blood_pressure,cholesterol,hdl_cholesterol,smoker,diabetic,systolic_bp_untreated,diastolic_bp_untreated,systolic_bp_medicated,diastolic_bp_medicated,total_cholesterol,triglycerides,diabetes_medication,family_history_cvd
+1758493563,RONAK PATWA,9429553333,pcciic,19,Male,175.0,246.0,28.0,False,False,108.0,66.0,134.0,56.0,173.0,113.0,False,False
+1758497418,xyz,390,djn,30,Male,119.0,168.0,,,,,,,,,,,
+1758519151,darshan patni,875982705,oihihi3,70,Male,157.0,241.0,,,,,,,,,,,
+1758530665,samresh veer ,4759345,ufhohfohf,100,Male,,,41.0,True,True,125.0,68.0,130.0,85.0,212.0,50.0,True,True
+1758534541,PUSJ,3945984,EUGUGIU,30,Male,,,50.0,True,True,163.0,112.0,130.0,85.0,280.0,252.0,False,True
